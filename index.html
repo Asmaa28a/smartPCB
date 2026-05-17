@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartPCB — Automatic PCB Generation</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c0f;
+    --surface: #111418;
+    --border: #1e2530;
+    --green: #00ff88;
+    --green-dim: #00cc6a;
+    --blue: #0099ff;
+    --orange: #ff6b2b;
+    --text: #e8edf2;
+    --muted: #5a6578;
+    --card: #13171e;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* GRID BACKGROUND */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,136,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,136,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* PCB TRACE DECORATION */
+  .trace-bg {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.07;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* NAV */
+  nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 28px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--green);
+    letter-spacing: 0.05em;
+  }
+
+  .logo-dot {
+    width: 8px; height: 8px;
+    background: var(--green);
+    border-radius: 50%;
+    box-shadow: 0 0 10px var(--green);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+
+  .nav-badge {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 20px;
+  }
+
+  /* HERO */
+  .hero {
+    padding: 90px 0 70px;
+    position: relative;
+  }
+
+  .hero-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--green);
+    background: rgba(0,255,136,0.06);
+    border: 1px solid rgba(0,255,136,0.2);
+    padding: 6px 14px;
+    border-radius: 4px;
+    margin-bottom: 32px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    animation: fadeUp 0.6s ease both;
+  }
+
+  .hero-tag::before {
+    content: '▶';
+    font-size: 0.55rem;
+  }
+
+  h1 {
+    font-size: clamp(2.8rem, 6vw, 5rem);
+    font-weight: 800;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    margin-bottom: 24px;
+    animation: fadeUp 0.6s 0.1s ease both;
+  }
+
+  h1 span {
+    color: var(--green);
+    position: relative;
+  }
+
+  h1 span::after {
+    content: '';
+    position: absolute;
+    bottom: 2px; left: 0; right: 0;
+    height: 3px;
+    background: var(--green);
+    opacity: 0.3;
+    border-radius: 2px;
+  }
+
+  .hero-desc {
+    font-size: 1.1rem;
+    color: #8a96a8;
+    max-width: 560px;
+    line-height: 1.7;
+    margin-bottom: 48px;
+    font-weight: 400;
+    animation: fadeUp 0.6s 0.2s ease both;
+  }
+
+  .hero-actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    animation: fadeUp 0.6s 0.3s ease both;
+  }
+
+  /* DOWNLOAD BUTTON */
+  .btn-download {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--green);
+    color: #050708;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 1rem;
+    padding: 16px 32px;
+    border-radius: 6px;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+    letter-spacing: 0.01em;
+  }
+
+  .btn-download::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(255,255,255,0.15);
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+  }
+
+  .btn-download:hover::before { transform: translateX(0); }
+  .btn-download:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(0,255,136,0.3); }
+  .btn-download:active { transform: translateY(0); }
+
+  .btn-download svg { flex-shrink: 0; }
+
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem;
+    text-decoration: none;
+    padding: 16px 20px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    transition: all 0.2s;
+  }
+
+  .btn-secondary:hover { color: var(--text); border-color: var(--muted); }
+
+  /* STATS BAR */
+  .stats-bar {
+    display: flex;
+    gap: 0;
+    margin: 64px 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    animation: fadeUp 0.6s 0.4s ease both;
+  }
+
+  .stat {
+    flex: 1;
+    padding: 24px 28px;
+    border-right: 1px solid var(--border);
+    position: relative;
+  }
+
+  .stat:last-child { border-right: none; }
+
+  .stat-value {
+    font-family: 'Space Mono', monospace;
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--green);
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  .stat-label {
+    font-size: 0.78rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  /* FEATURES */
+  .section-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    margin-bottom: 32px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .section-label::before {
+    content: '';
+    display: block;
+    width: 24px;
+    height: 1px;
+    background: var(--muted);
+  }
+
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 80px;
+  }
+
+  .feature-card {
+    background: var(--card);
+    padding: 28px 24px;
+    transition: background 0.2s;
+  }
+
+  .feature-card:hover { background: #161b23; }
+
+  .feature-icon {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--green);
+    background: rgba(0,255,136,0.08);
+    border: 1px solid rgba(0,255,136,0.15);
+    padding: 4px 8px;
+    border-radius: 3px;
+    margin-bottom: 16px;
+    display: inline-block;
+    letter-spacing: 0.05em;
+  }
+
+  .feature-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+
+  .feature-desc {
+    font-size: 0.82rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  /* HOW TO USE */
+  .how-section {
+    margin-bottom: 80px;
+  }
+
+  .steps {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .step {
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+    padding: 24px 28px;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.2s;
+  }
+
+  .step:last-child { border-bottom: none; }
+  .step:hover { background: var(--card); }
+
+  .step-num {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--green);
+    background: rgba(0,255,136,0.07);
+    border: 1px solid rgba(0,255,136,0.15);
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .step-text strong {
+    display: block;
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+    color: var(--text);
+  }
+
+  .step-text span {
+    font-size: 0.83rem;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  /* DOWNLOAD SECTION */
+  .download-section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 56px 48px;
+    text-align: center;
+    margin-bottom: 80px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .download-section::before {
+    content: '';
+    position: absolute;
+    top: -80px; left: 50%;
+    transform: translateX(-50%);
+    width: 300px; height: 300px;
+    background: radial-gradient(circle, rgba(0,255,136,0.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .download-section h2 {
+    font-size: 2rem;
+    font-weight: 800;
+    margin-bottom: 12px;
+    letter-spacing: -0.02em;
+  }
+
+  .download-section p {
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin-bottom: 36px;
+    line-height: 1.6;
+  }
+
+  .file-info {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--muted);
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    padding: 6px 14px;
+    border-radius: 20px;
+    margin-bottom: 28px;
+  }
+
+  /* FOOTER */
+  .footer-main {
+    background: #0d1017;
+    border-top: 1px solid var(--border);
+    padding: 60px 0 0;
+  }
+  .footer-grid {
+    display: grid;
+    grid-template-columns: 1.6fr 1fr 1fr 1fr;
+    gap: 40px;
+    padding-bottom: 48px;
+    border-bottom: 1px solid var(--border);
+  }
+  .footer-brand .logo { margin-bottom: 16px; }
+  .footer-brand p {
+    font-size: 0.82rem;
+    color: var(--muted);
+    line-height: 1.7;
+    max-width: 240px;
+    margin-bottom: 24px;
+  }
+  .footer-contact { display: flex; flex-direction: column; gap: 10px; }
+  .footer-contact a {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 0.82rem; color: var(--muted);
+    text-decoration: none; transition: color 0.2s;
+  }
+  .footer-contact a:hover { color: var(--green); }
+  .footer-contact a svg { flex-shrink: 0; opacity: 0.5; }
+  .footer-col h4 {
+    font-size: 0.78rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--text); margin-bottom: 20px;
+  }
+  .footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .footer-col ul li a {
+    font-size: 0.82rem; color: var(--muted);
+    text-decoration: none; transition: color 0.2s;
+  }
+  .footer-col ul li a:hover { color: var(--green); }
+  .footer-bottom {
+    display: flex; justify-content: space-between;
+    align-items: center; padding: 20px 0;
+    flex-wrap: wrap; gap: 12px;
+  }
+  .footer-bottom p {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.68rem; color: var(--muted);
+  }
+  .footer-tags { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tag {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem; color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 3px 8px; border-radius: 3px;
+  }
+  @media (max-width: 768px) { .footer-grid { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 480px) { .footer-grid { grid-template-columns: 1fr; } }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(18px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* PCB SVG BG */
+  .pcb-corner {
+    position: absolute;
+    top: 20px; right: 0;
+    opacity: 0.12;
+    pointer-events: none;
+  }
+
+  @media (max-width: 640px) {
+    .features-grid { grid-template-columns: 1fr; }
+    .stats-bar { flex-direction: column; }
+    .stat { border-right: none; border-bottom: 1px solid var(--border); }
+    .stat:last-child { border-bottom: none; }
+    .download-section { padding: 36px 24px; }
+    h1 { font-size: 2.4rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- PCB SVG Background -->
+<svg class="trace-bg" viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+  <g stroke="#00ff88" fill="none" stroke-width="1.5">
+    <path d="M100,100 H300 V200 H500 V100 H700"/>
+    <path d="M700,100 V400 H900 V200 H1100"/>
+    <path d="M100,300 H200 V500 H400 V300 H600 V600 H800"/>
+    <path d="M200,600 H400 V700 H600"/>
+    <path d="M800,400 H1000 V600 H1100 V700"/>
+    <path d="M50,500 H150 V700 H350 V500"/>
+    <!-- Pads -->
+    <circle cx="300" cy="100" r="6" fill="#00ff88"/>
+    <circle cx="700" cy="100" r="6" fill="#00ff88"/>
+    <circle cx="700" cy="400" r="6" fill="#00ff88"/>
+    <circle cx="400" cy="300" r="6" fill="#00ff88"/>
+    <circle cx="800" cy="400" r="6" fill="#00ff88"/>
+    <circle cx="1000" cy="600" r="6" fill="#00ff88"/>
+    <circle cx="350" cy="500" r="6" fill="#00ff88"/>
+    <circle cx="600" cy="600" r="6" fill="#00ff88"/>
+    <!-- Vias -->
+    <circle cx="500" cy="100" r="4" stroke="#0099ff" stroke-width="1.5"/>
+    <circle cx="900" cy="200" r="4" stroke="#0099ff" stroke-width="1.5"/>
+    <circle cx="600" cy="300" r="4" stroke="#0099ff" stroke-width="1.5"/>
+  </g>
+</svg>
+
+<div class="container">
+
+  <!-- NAV -->
+  <nav style="display:flex;align-items:center;justify-content:space-between;padding:22px 0;border-bottom:1px solid var(--border);position:sticky;top:0;background:rgba(10,12,15,0.92);backdrop-filter:blur(12px);z-index:100;">
+    <div class="logo" style="font-size:1.1rem;letter-spacing:0.08em;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="2" width="20" height="20" rx="2"/>
+        <path d="M7 12h3m4 0h3M12 7v3m0 4v3"/>
+        <circle cx="12" cy="12" r="2" fill="var(--green)" stroke="none"/>
+      </svg>
+      Smart<span style="color:var(--text)">PCB</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:28px;">
+      <a href="#features" style="font-size:0.85rem;color:var(--muted);text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Features</a>
+      <a href="#how" style="font-size:0.85rem;color:var(--muted);text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">How to use</a>
+      <a href="SmartPCB.zip" download class="btn-download" style="padding:10px 22px;font-size:0.85rem;gap:8px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download
+      </a>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero" style="padding:80px 0 70px;text-align:left;">
+
+    <!-- Title — left aligned, reasonable size -->
+    <h1 style="font-size:clamp(2rem,4vw,3.2rem);line-height:1.12;letter-spacing:-0.02em;margin-bottom:20px;animation:fadeUp 0.6s 0.1s ease both;max-width:640px;">
+      Automatic PCB Generation<br>from <span>KiCad Netlists</span>
+    </h1>
+
+    <!-- Subtitle -->
+    <p class="hero-desc" style="max-width:520px;margin:0 0 16px;font-size:1rem;animation:fadeUp 0.6s 0.2s ease both;">
+      SmartPCB automates the full PCB pipeline — placement, routing, scoring and export — so you can go from netlist to board in minutes, not hours.
+    </p>
+
+    <!-- Sub-note -->
+    <p style="font-family:'Space Mono',monospace;font-size:0.72rem;color:var(--muted);margin-bottom:36px;animation:fadeUp 0.6s 0.25s ease both;">
+      Windows · No installation required · Free
+    </p>
+
+    <!-- CTA Buttons -->
+    <div class="hero-actions" style="justify-content:flex-start;animation:fadeUp 0.6s 0.3s ease both;">
+      <a href="SmartPCB.zip" download class="btn-download" style="font-size:0.95rem;padding:15px 32px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Download SmartPCB — Free
+      </a>
+      <a href="#how" class="btn-secondary">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
+        How it works
+      </a>
+    </div>
+
+    <!-- Trust line -->
+    <p style="font-size:0.76rem;color:var(--muted);margin-top:16px;animation:fadeUp 0.6s 0.35s ease both;">
+      By <strong style="color:var(--text)">Aichoune Akram Wassim · Aoune Asma · Ayachi Rania Samira</strong>
+    </p>
+
+    <!-- WHY CHOOSE US BAR -->
+    <div class="stats-bar" style="margin-top:56px;">
+
+      <div class="stat">
+        <span class="stat-value">95.3%</span>
+        <span class="stat-label">Avg Routing Completion</span>
+      </div>
+
+      <div class="stat" style="border-left:2px solid rgba(0,255,136,0.15);">
+        <span style="font-size:1.3rem;margin-bottom:6px;display:block;">⚡</span>
+        <span class="stat-label" style="color:var(--text);font-size:0.82rem;font-weight:700;margin-bottom:4px;display:block;">No Manual Work</span>
+        <span class="stat-label">Load a netlist, click Run — everything else is automatic.</span>
+      </div>
+
+      <div class="stat" style="border-left:2px solid rgba(0,255,136,0.15);">
+        <span style="font-size:1.3rem;margin-bottom:6px;display:block;">🤖</span>
+        <span class="stat-label" style="color:var(--text);font-size:0.82rem;font-weight:700;margin-bottom:4px;display:block;">AI-Guided Optimization</span>
+        <span class="stat-label">ML filter skips bad placements before routing, saving time.</span>
+      </div>
+
+      <div class="stat" style="border-left:2px solid rgba(0,255,136,0.15);">
+        <span style="font-size:1.3rem;margin-bottom:6px;display:block;">📦</span>
+        <span class="stat-label" style="color:var(--text);font-size:0.82rem;font-weight:700;margin-bottom:4px;display:block;">KiCad Ready Export</span>
+        <span class="stat-label">Result exports directly as .kicad_pcb — open in KiCad instantly.</span>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section id="features">
+    <div class="section-label">Features</div>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">PARSER</div>
+        <div class="feature-title">KiCad Netlist Import</div>
+        <div class="feature-desc">Load any .kicad_net file directly. Validates components, pins, and net consistency automatically.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">PLACEMENT</div>
+        <div class="feature-title">Force-Directed + SA</div>
+        <div class="feature-desc">Hybrid placement using force-directed simulation followed by simulated annealing refinement.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">ROUTING</div>
+        <div class="feature-title">A* 3D Router</div>
+        <div class="feature-desc">4-layer A* routing with via minimization, fallback strategies, and rip-up/reroute mechanism.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">AI / ML</div>
+        <div class="feature-title">Routability Prediction</div>
+        <div class="feature-desc">Gradient Boosting model predicts routing success in ~0.3ms, skipping poor placements before routing.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">SCORING</div>
+        <div class="feature-title">Multi-Criteria Score</div>
+        <div class="feature-desc">Completion rate, wire length, critical nets, compactness and via count — all combined into one score.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">EXPORT</div>
+        <div class="feature-title">KiCad Export</div>
+        <div class="feature-desc">Generates a .kicad_pcb file directly openable in KiCad PCB Editor. No manual conversion needed.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- APP PREVIEW -->
+  <section style="margin-bottom:80px;">
+    <div class="section-label">App Preview</div>
+    <p style="color:var(--muted);font-size:0.88rem;margin-bottom:32px;max-width:500px;line-height:1.6;">
+      See what SmartPCB looks like in action — from an empty interface to a fully routed PCB board.
+    </p>
+
+    <!-- Tab switcher -->
+    <div style="display:flex;gap:0;margin-bottom:0;border:1px solid var(--border);border-bottom:none;border-radius:8px 8px 0 0;overflow:hidden;width:fit-content;">
+      <button onclick="showTab('before')" id="tab-before"
+        style="font-family:'Space Mono',monospace;font-size:0.72rem;padding:10px 20px;background:rgba(0,255,136,0.08);color:var(--green);border:none;cursor:pointer;border-right:1px solid var(--border);letter-spacing:0.05em;">
+        ● BEFORE — Empty Interface
+      </button>
+      <button onclick="showTab('after')" id="tab-after"
+        style="font-family:'Space Mono',monospace;font-size:0.72rem;padding:10px 20px;background:transparent;color:var(--muted);border:none;cursor:pointer;letter-spacing:0.05em;">
+        ○ AFTER — Pipeline Result
+      </button>
+    </div>
+
+    <!-- Screenshot frame -->
+    <div style="border:1px solid var(--border);border-radius:0 8px 8px 8px;overflow:hidden;background:var(--card);position:relative;">
+
+      <!-- Window chrome -->
+      <div style="background:#1a1f28;padding:10px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);">
+        <div style="width:10px;height:10px;border-radius:50%;background:#ff5f56;"></div>
+        <div style="width:10px;height:10px;border-radius:50%;background:#ffbd2e;"></div>
+        <div style="width:10px;height:10px;border-radius:50%;background:#27c93f;"></div>
+        <span style="font-family:'Space Mono',monospace;font-size:0.65rem;color:var(--muted);margin-left:12px;">SmartPCB — PCB Auto-Designer</span>
+      </div>
+
+      <!-- BEFORE screenshot slot -->
+      <div id="screen-before" style="display:block;">
+        <div style="position:relative;background:#0e1117;min-height:340px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;">
+          <!-- Placeholder — replace src with your real screenshot -->
+          <img src="screenshot-before.png" alt="SmartPCB empty interface"
+            onerror="this.style.display='none';document.getElementById('placeholder-before').style.display='flex';"
+            style="width:100%;display:block;object-fit:cover;">
+          <div id="placeholder-before" style="display:none;flex-direction:column;align-items:center;gap:12px;padding:48px;">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/></svg>
+            <p style="font-family:'Space Mono',monospace;font-size:0.72rem;color:var(--muted);text-align:center;line-height:1.6;">
+              Add your screenshot here<br>
+              Name it <span style="color:var(--green)">screenshot-before.png</span><br>
+              and place it next to index.html
+            </p>
+          </div>
+          <!-- Stats overlay -->
+          <div style="position:absolute;bottom:16px;right:16px;background:rgba(10,12,15,0.85);border:1px solid var(--border);border-radius:6px;padding:10px 14px;backdrop-filter:blur(8px);">
+            <div style="font-family:'Space Mono',monospace;font-size:0.65rem;color:var(--muted);">STATUS</div>
+            <div style="font-family:'Space Mono',monospace;font-size:0.75rem;color:var(--green);margin-top:4px;">Waiting for netlist...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AFTER screenshot slot -->
+      <div id="screen-after" style="display:none;">
+        <div style="position:relative;background:#0e1117;min-height:340px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;">
+          <img src="screenshot-after.png" alt="SmartPCB pipeline result"
+            onerror="this.style.display='none';document.getElementById('placeholder-after').style.display='flex';"
+            style="width:100%;display:block;object-fit:cover;">
+          <div id="placeholder-after" style="display:none;flex-direction:column;align-items:center;gap:12px;padding:48px;">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/></svg>
+            <p style="font-family:'Space Mono',monospace;font-size:0.72rem;color:var(--muted);text-align:center;line-height:1.6;">
+              Add your screenshot here<br>
+              Name it <span style="color:var(--green)">screenshot-after.png</span><br>
+              and place it next to index.html
+            </p>
+          </div>
+          <!-- Stats overlay -->
+          <div style="position:absolute;bottom:16px;right:16px;background:rgba(10,12,15,0.85);border:1px solid var(--border);border-radius:6px;padding:10px 14px;backdrop-filter:blur(8px);">
+            <div style="font-family:'Space Mono',monospace;font-size:0.65rem;color:var(--muted);">RESULT</div>
+            <div style="font-family:'Space Mono',monospace;font-size:0.75rem;color:var(--green);margin-top:4px;">Completion: 95.3% · Score: 86.8</div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- end frame -->
+
+    <script>
+      function showTab(name) {
+        document.getElementById('screen-before').style.display = name === 'before' ? 'block' : 'none';
+        document.getElementById('screen-after').style.display  = name === 'after'  ? 'block' : 'none';
+        document.getElementById('tab-before').style.background = name === 'before' ? 'rgba(0,255,136,0.08)' : 'transparent';
+        document.getElementById('tab-before').style.color      = name === 'before' ? 'var(--green)' : 'var(--muted)';
+        document.getElementById('tab-after').style.background  = name === 'after'  ? 'rgba(0,255,136,0.08)' : 'transparent';
+        document.getElementById('tab-after').style.color       = name === 'after'  ? 'var(--green)' : 'var(--muted)';
+        document.getElementById('tab-before').textContent      = name === 'before' ? '● BEFORE — Empty Interface' : '○ BEFORE — Empty Interface';
+        document.getElementById('tab-after').textContent       = name === 'after'  ? '● AFTER — Pipeline Result' : '○ AFTER — Pipeline Result';
+      }
+    </script>
+  </section>
+
+  <!-- HOW TO USE -->
+  <section class="how-section" id="how">
+    <div class="section-label">How to use</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">01</div>
+        <div class="step-text">
+          <strong>Download & Extract</strong>
+          <span>Click the Download button above. Extract the ZIP file anywhere on your PC — no installation needed.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">02</div>
+        <div class="step-text">
+          <strong>Run SmartPCB.exe</strong>
+          <span>Open the extracted folder and double-click <code style="color:var(--green);font-family:monospace">SmartLayout.exe</code>. No Python required.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">03</div>
+        <div class="step-text">
+          <strong>Load a Netlist</strong>
+          <span>Click "Load Netlist" and choose a <code style="color:var(--green);font-family:monospace">.kicad_net</code> file from the netlists folder included in the ZIP.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">04</div>
+        <div class="step-text">
+          <strong>Configure & Run Pipeline</strong>
+          <span>Set board size, seed, and optimization mode. Click "Run Pipeline" and watch the PCB generate in real time.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">05</div>
+        <div class="step-text">
+          <strong>Export to KiCad</strong>
+          <span>When done, click "Export" to save a <code style="color:var(--green);font-family:monospace">.kicad_pcb</code> file you can open directly in KiCad.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DOWNLOAD SECTION -->
+  <section class="download-section">
+    <h2>Ready to try SmartPCB?</h2>
+    <p>No installation. No Python needed. Just download, extract, and run.<br>Works on any Windows PC.</p>
+    <div class="file-info">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      SmartPCB.zip — Windows x64
+    </div>
+    <br>
+    <a href="SmartPCB.zip" download class="btn-download" style="font-size:1.05rem;padding:18px 40px;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      Download SmartPCB.zip
+    </a>
+  </section>
+
+
+</div><!-- end container -->
+
+<!-- FOOTER (full width) -->
+<footer class="footer-main">
+  <div class="container">
+
+    <div class="footer-grid">
+
+      <!-- Brand + Contact -->
+      <div class="footer-brand">
+        <div class="logo">
+          <div class="logo-dot"></div>
+          Smart<span style="color:var(--text)">PCB</span>
+        </div>
+        <p>Automatic PCB generation from KiCad netlists. Force-directed placement, A* routing, and ML optimization — all in one desktop app.</p>
+        <div class="footer-contact">
+          <a href="mailto:your@email.com">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+            your@email.com
+          </a>
+          <a href="tel:+213000000000">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.77a16 16 0 0 0 6.29 6.29l1.86-1.86a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            +213 00 000 0000
+          </a>
+          <a href="#">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+            Algiers, Algeria — USTHB
+          </a>
+        </div>
+      </div>
+
+      <!-- Project -->
+      <div class="footer-col">
+        <h4>Project</h4>
+        <ul>
+          <li><a href="#">Download App</a></li>
+          <li><a href="#how">How to Use</a></li>
+          <li><a href="#">Netlists Examples</a></li>
+          <li><a href="#">Release Notes</a></li>
+        </ul>
+      </div>
+
+      <!-- About -->
+      <div class="footer-col">
+        <h4>About</h4>
+        <ul>
+          <li><a href="#">The Team</a></li>
+          <li><a href="#">USTHB Faculty</a></li>
+          <li><a href="#">Thesis Document</a></li>
+          <li><a href="#">Supervisor</a></li>
+        </ul>
+      </div>
+
+      <!-- Help -->
+      <div class="footer-col">
+        <h4>Help</h4>
+        <ul>
+          <li><a href="#how">Getting Started</a></li>
+          <li><a href="#">KiCad Guide</a></li>
+          <li><a href="#">FAQ</a></li>
+          <li><a href="mailto:your@email.com">Contact Us</a></li>
+        </ul>
+      </div>
+
+    </div>
+
+    <!-- Bottom bar -->
+    <div class="footer-bottom">
+      <p>© 2025–2026</p>
+      </div>
+    </div>
+
+  </div>
+</footer>
+</body>
+</html>
